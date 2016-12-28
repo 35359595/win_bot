@@ -1,0 +1,96 @@
+//
+// Aggresive strategy "run-and-kick"- all players run to ball and kick it if possible to any direction
+//
+'use strict';
+
+function getDirectionTo(startPoint, endPoint) {
+  return Math.atan2(endPoint.y - startPoint.y, endPoint.x - startPoint.x);
+}
+
+function getPlayerMove(data) {
+  var fieldW = data.settings.field.width;
+  var fiwldH = data.settings.field.height;
+  var halfField = data.settings.field.width / 3;
+  var currentPlayer = data.yourTeam.players[data.playerIndex];
+  var currentPlayerIndex = data.playerIndex;
+  var ball = data.ball;
+  var startZone = currentPlayer.x;
+  var ballStop = getBallStats(ball, data.settings);
+  var ballRadius = ball.settings.radius;
+
+  var attack = function(differ){
+    return Math.atan2((ballStop.y < 0 ? ball.y : ballStop.y) - currentPlayer.y, differ + ballStop.x - currentPlayer.x - ballRadius * 2);
+  };
+
+  var defend = function(differ){
+    return Math.atan2(
+        (ballStop.y < 0 ? ball.y : ballStop.y) - currentPlayer.y + ( Math.abs(ball.y - currentPlayer.y) < ballRadius * 2 
+          ? ballStop.x - currentPlayer.x < ballRadius * 2
+            ? - ballRadius * 3
+            : ballRadius * 3
+          : 0),
+        ballStop.x - currentPlayer.x + differ - ballRadius * 3
+      );
+  }; 
+
+  var amICloser = function(){
+    for (var i = 0; i < data.yourTeam.players.length; i++){
+      var cP = data.yourTeam.players[i];
+      if (ball.x - cP.x + ball.y - cP.y < ball.x - currentPlayer.x + ball.y - currentPlayer.y){
+        return false;
+      }
+    }
+    return true;
+  };
+
+if(currentPlayerIndex != 1){
+  var whoAmI = currentPlayerIndex == 0 ? 0 : 2;
+  var thisPlayer = data.yourTeam.players[whoAmI];
+  var anotherPlayer = data.yourTeam.players[[2,1,0][whoAmI]];
+
+  if(amICloser()){//(halfField - ball.x - thisPlayer.x)<(halfField - ball.x - anotherPlayer.x)){//forward
+    if(ball.x > currentPlayer.x + ballRadius){//attack
+      var attackDirection = attack(0);
+    }else if(anotherPlayer.x > ball.x){//defend
+      var attackDirection = defend(ballStop.x < halfField - ballRadius * 2 ? halfField / 2 : 0); 
+    }
+  }else{//middler
+    if(ball.x > currentPlayer.x + ballRadius){//attack
+      var attackDirection = attack(Math.abs(ball.x - anotherPlayer.x) < Math.abs(ball.x - currentPlayer.x) ? - halfField / 4 : 0);
+    }else{//defend
+      var attackDirection = defend(ballStop.x < halfField - ballRadius * 2 ? halfField / 3 : 0);
+    }
+  }
+}else{//defender
+  if (amICloser() || (ballStop.x < halfField - ballRadius) && (ball.x > currentPlayer.x)){//attack
+    var attackDirection = attack(0);
+  }else{//defend
+    var attackDirection = defend(ballStop.x > halfField + ballRadius * 2 ? - halfField : 0); 
+  }
+}
+
+  return {
+    direction: attackDirection,
+    velocity: currentPlayer.velocity + data.settings.player.maxVelocityIncrement
+  };
+}
+
+function getBallStats(ball, gameSettings) {
+  var stopTime = getStopTime(ball);
+  var stopDistance = ball.velocity * stopTime
+    - ball.settings.moveDeceleration * (stopTime + 1) * stopTime / 2;
+
+  var x = ball.x + stopDistance * Math.cos(ball.direction);
+  var y = Math.abs(ball.y + stopDistance * Math.sin(ball.direction));
+
+  // check the reflection from field side
+  if (y > gameSettings.field.height) y = 2 * gameSettings.field.height - y;
+
+  return { stopTime, stopDistance, x, y };
+}
+
+function getStopTime(ball) {
+  return ball.velocity / ball.settings.moveDeceleration;
+}
+
+onmessage = (e) => postMessage(getPlayerMove(e.data));
